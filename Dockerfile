@@ -44,7 +44,7 @@ RUN curl -s -O -L https://github.com/zegl/kube-score/releases/download/v${kubesc
   && mv kube-score /usr/local/bin/kube-score \
   && chmod +x /usr/local/bin/kube-score
 
-RUN dnf install -y python3-pip && pip install --user yamllint
+RUN dnf install -y python3-pip && pip install yamllint
 
 RUN rm -Rf linux-amd64/ kube-linter-linux.tar.gz helm-v${helm_version}-linux-amd64.tar.gz kube-score_${kubescore_version}_linux_amd64.tar.gz LICENSE
 
