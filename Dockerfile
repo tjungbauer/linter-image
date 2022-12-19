@@ -1,7 +1,7 @@
 FROM registry.access.redhat.com/ubi9/ubi:latest
 
 ARG helm_version=3.9.0
-ARG kubelinter_version=0.3.0
+ARG kubelinter_version=0.5.1
 ARG kubescore_version=1.14.0
 
 LABEL maintainer="Red Hat, Inc."
