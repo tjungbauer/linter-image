@@ -1,14 +1,14 @@
 FROM registry.access.redhat.com/ubi9/ubi:latest
 
-ARG helm_version=3.9.0
-ARG kubelinter_version=0.5.1
-ARG kubescore_version=1.14.0
+ARG helm_version=3.12.1
+ARG kubelinter_version=0.6.4
+ARG kubescore_version=1.16.1
 
 LABEL maintainer="Red Hat, Inc."
 
 LABEL com.redhat.component="ubi9-container" \
       name="ubi9" \
-      version="9.0.0"
+      version="9.1.0"
 
 #label for EULA
 LABEL com.redhat.license_terms="https://www.redhat.com/en/about/red-hat-end-user-license-agreements#UBI"
@@ -34,7 +34,7 @@ RUN curl -s -O https://get.helm.sh/helm-v{$helm_version}-linux-amd64.tar.gz \
   && mv linux-amd64/helm /usr/local/bin/helm \
   && chmod +x /usr/local/bin/helm 
 
-RUN curl -s -O -L https://github.com/stackrox/kube-linter/releases/download/${kubelinter_version}/kube-linter-linux.tar.gz \
+RUN curl -s -O -L https://github.com/stackrox/kube-linter/releases/download/v${kubelinter_version}/kube-linter-linux.tar.gz \
   && tar -xf kube-linter-linux.tar.gz \
   && mv kube-linter /usr/local/bin/kube-linter \
   && chmod +x /usr/local/bin/kube-linter
