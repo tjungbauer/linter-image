@@ -1,7 +1,7 @@
 FROM --platform=linux/amd64 registry.access.redhat.com/ubi10/ubi-minimal:latest
 
 # Tool versions
-ARG HELM_VERSION=3.16.3
+ARG HELM_VERSION=3.19.2
 ARG KUBELINTER_VERSION=0.7.1
 ARG KUBESCORE_VERSION=1.19.0
 
