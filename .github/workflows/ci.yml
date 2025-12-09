@@ -260,9 +260,9 @@ jobs:
 
       - name: Update version files if changed
         run: |
-          [ -n "${{ github.event.inputs.helm_version }}" ] && echo "${{ needs.version.outputs.helm_version }}" > HELM_VERSION
-          [ -n "${{ github.event.inputs.kubelinter_version }}" ] && echo "${{ needs.version.outputs.kubelinter_version }}" > KUBELINTER_VERSION
-          [ -n "${{ github.event.inputs.kubescore_version }}" ] && echo "${{ needs.version.outputs.kubescore_version }}" > KUBESCORE_VERSION
+          [ -n "${{ github.event.inputs.helm_version }}" ] && echo "${{ needs.version.outputs.helm_version }}" > HELM_VERSION || true
+          [ -n "${{ github.event.inputs.kubelinter_version }}" ] && echo "${{ needs.version.outputs.kubelinter_version }}" > KUBELINTER_VERSION || true
+          [ -n "${{ github.event.inputs.kubescore_version }}" ] && echo "${{ needs.version.outputs.kubescore_version }}" > KUBESCORE_VERSION || true
 
       - name: Commit and push changes
         run: |
