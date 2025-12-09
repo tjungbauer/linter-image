@@ -35,10 +35,9 @@ RUN curl -fsSL -o /tmp/kube-score.tar.gz -L "https://github.com/zegl/kube-score/
     && chmod +x /usr/local/bin/kube-score \
     && rm -f /tmp/kube-score.tar.gz
 
-# Cleanup
-RUN microdnf remove -y curl tar gzip \
-    && microdnf clean all \
-    && rm -rf /var/cache/yum
+# Cleanup package cache
+RUN microdnf clean all \
+    && rm -rf /var/cache/yum /tmp/*
 
 # Create non-root user
 RUN useradd -m -s /bin/sh -u 1000 linter
