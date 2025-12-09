@@ -1,0 +1,328 @@
+---
+name: Build Linter Container Image
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      helm_version:
+        description: 'Helm version'
+        required: false
+        type: string
+        default: ''
+      kubelinter_version:
+        description: 'kube-linter version'
+        required: false
+        type: string
+        default: ''
+      kubescore_version:
+        description: 'kube-score version'
+        required: false
+        type: string
+        default: ''
+      version_bump:
+        description: 'Container image version bump type'
+        required: false
+        type: choice
+        options:
+          - none
+          - patch
+          - minor
+          - major
+        default: 'none'
+
+env:
+  REGISTRY: quay.io
+  IMAGE_NAME: tjungbau/linter-image
+
+jobs:
+  lint:
+    name: Lint Dockerfile
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run hadolint
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: Dockerfile
+          failure-threshold: warning
+          ignore: DL3007,DL3029,DL3041,DL3013
+
+  version:
+    name: Determine Version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get_version.outputs.version }}
+      helm_version: ${{ steps.get_tools.outputs.helm_version }}
+      kubelinter_version: ${{ steps.get_tools.outputs.kubelinter_version }}
+      kubescore_version: ${{ steps.get_tools.outputs.kubescore_version }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Bump version if requested
+        if: github.event.inputs.version_bump != 'none' && github.event.inputs.version_bump != ''
+        run: |
+          CURRENT=$(cat VERSION | tr -d '[:space:]')
+          MAJOR=$(echo $CURRENT | cut -d. -f1)
+          MINOR=$(echo $CURRENT | cut -d. -f2)
+          PATCH=$(echo $CURRENT | cut -d. -f3)
+          
+          case "${{ github.event.inputs.version_bump }}" in
+            major)
+              NEW_VERSION="$((MAJOR + 1)).0.0"
+              ;;
+            minor)
+              NEW_VERSION="${MAJOR}.$((MINOR + 1)).0"
+              ;;
+            patch)
+              NEW_VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))"
+              ;;
+          esac
+          
+          echo "$NEW_VERSION" > VERSION
+          echo "Bumped version: $CURRENT → $NEW_VERSION"
+
+      - name: Get container image version
+        id: get_version
+        run: |
+          VERSION=$(cat VERSION | tr -d '[:space:]')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Container image version: $VERSION"
+
+      - name: Get tool versions
+        id: get_tools
+        run: |
+          # Helm
+          if [ -n "${{ github.event.inputs.helm_version }}" ]; then
+            HELM_VERSION="${{ github.event.inputs.helm_version }}"
+          else
+            HELM_VERSION=$(cat HELM_VERSION | tr -d '[:space:]')
+          fi
+          echo "helm_version=$HELM_VERSION" >> $GITHUB_OUTPUT
+          
+          # kube-linter
+          if [ -n "${{ github.event.inputs.kubelinter_version }}" ]; then
+            KUBELINTER_VERSION="${{ github.event.inputs.kubelinter_version }}"
+          else
+            KUBELINTER_VERSION=$(cat KUBELINTER_VERSION | tr -d '[:space:]')
+          fi
+          echo "kubelinter_version=$KUBELINTER_VERSION" >> $GITHUB_OUTPUT
+          
+          # kube-score
+          if [ -n "${{ github.event.inputs.kubescore_version }}" ]; then
+            KUBESCORE_VERSION="${{ github.event.inputs.kubescore_version }}"
+          else
+            KUBESCORE_VERSION=$(cat KUBESCORE_VERSION | tr -d '[:space:]')
+          fi
+          echo "kubescore_version=$KUBESCORE_VERSION" >> $GITHUB_OUTPUT
+          
+          echo "Tool versions: Helm=$HELM_VERSION, kube-linter=$KUBELINTER_VERSION, kube-score=$KUBESCORE_VERSION"
+
+      - name: Upload VERSION files
+        uses: actions/upload-artifact@v4
+        with:
+          name: version-files
+          path: |
+            VERSION
+            HELM_VERSION
+            KUBELINTER_VERSION
+            KUBESCORE_VERSION
+          retention-days: 1
+
+  build:
+    name: Build and Push Image
+    runs-on: ubuntu-latest
+    needs: [lint, version]
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image_digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download VERSION files
+        uses: actions/download-artifact@v4
+        with:
+          name: version-files
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Quay.io
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.QUAY_USER }}
+          password: ${{ secrets.QUAY_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=${{ needs.version.outputs.version }}
+            type=raw,value=helm-v${{ needs.version.outputs.helm_version }}
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            HELM_VERSION=${{ needs.version.outputs.helm_version }}
+            KUBELINTER_VERSION=${{ needs.version.outputs.kubelinter_version }}
+            KUBESCORE_VERSION=${{ needs.version.outputs.kubescore_version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Output image details
+        run: |
+          echo "### Image Built Successfully 🚀" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Image | \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Container Version | \`${{ needs.version.outputs.version }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Helm Version | \`${{ needs.version.outputs.helm_version }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| kube-linter Version | \`${{ needs.version.outputs.kubelinter_version }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| kube-score Version | \`${{ needs.version.outputs.kubescore_version }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Digest | \`${{ steps.build.outputs.digest }}\` |" >> $GITHUB_STEP_SUMMARY
+
+  scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: [build, version]
+    if: github.event_name != 'pull_request'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.version.outputs.version }}
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH,MEDIUM'
+
+      - name: Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v4
+        if: always()
+        continue-on-error: true  # Don't fail if Advanced Security is not enabled
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+      - name: Run Trivy for console output
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.version.outputs.version }}
+          format: 'table'
+          severity: 'CRITICAL,HIGH,MEDIUM'
+
+  update-version:
+    name: Update Version Files
+    runs-on: ubuntu-latest
+    needs: [build, version, scan]
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download VERSION files
+        uses: actions/download-artifact@v4
+        with:
+          name: version-files
+
+      - name: Update version files if changed
+        run: |
+          [ -n "${{ github.event.inputs.helm_version }}" ] && echo "${{ needs.version.outputs.helm_version }}" > HELM_VERSION
+          [ -n "${{ github.event.inputs.kubelinter_version }}" ] && echo "${{ needs.version.outputs.kubelinter_version }}" > KUBELINTER_VERSION
+          [ -n "${{ github.event.inputs.kubescore_version }}" ] && echo "${{ needs.version.outputs.kubescore_version }}" > KUBESCORE_VERSION
+
+      - name: Commit and push changes
+        run: |
+          VERSION=$(cat VERSION | tr -d '[:space:]')
+          
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          git add VERSION HELM_VERSION KUBELINTER_VERSION KUBESCORE_VERSION
+          
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "chore: bump to v${VERSION} [skip ci]"
+            git push
+            echo "✓ Committed and pushed changes"
+          fi
+
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [version, update-version]
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create GitHub Release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: v${{ needs.version.outputs.version }}
+          name: Release v${{ needs.version.outputs.version }}
+          body: |
+            ## Linter Container Image v${{ needs.version.outputs.version }}
+            
+            ### Container Image
+            - **Image**: `${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.version.outputs.version }}`
+            - **Platform**: linux/amd64
+            - **Base**: UBI9 Minimal
+            
+            ### Included Tools
+            | Tool | Version |
+            |------|---------|
+            | Helm | ${{ needs.version.outputs.helm_version }} |
+            | kube-linter | ${{ needs.version.outputs.kubelinter_version }} |
+            | kube-score | ${{ needs.version.outputs.kubescore_version }} |
+            | yamllint | latest |
+            
+            ### Pull Image
+            ```bash
+            podman pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.version.outputs.version }}
+            # or by Helm version
+            podman pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:helm-v${{ needs.version.outputs.helm_version }}
+            ```
+          draft: false
+          prerelease: false
+          makeLatest: true
+          allowUpdates: true
+
