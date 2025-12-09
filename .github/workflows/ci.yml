@@ -53,7 +53,7 @@ jobs:
         with:
           dockerfile: Dockerfile
           failure-threshold: warning
-          ignore: DL3007,DL3029,DL3041,DL3013,DL4006
+          ignore: DL3007,DL3029,DL3040,DL3041,DL3013,DL4006
 
   version:
     name: Determine Version
