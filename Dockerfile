@@ -1,4 +1,4 @@
-FROM --platform=linux/amd64 registry.access.redhat.com/ubi10/ubi-minimal:latest@sha256:f8c05e3c6d15fea32e59635477c0f690e6d4b88a81924e8619f369e57306b701
+FROM --platform=linux/amd64 registry.access.redhat.com/ubi10/ubi-minimal:latest@sha256:fa956af586b367c3366ac4376c3ee42a1141792b482e77d57aefb813f740f04d
 
 # Tool versions
 ARG HELM_VERSION=3.19.2
