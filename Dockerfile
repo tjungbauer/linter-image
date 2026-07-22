@@ -1,9 +1,9 @@
 FROM --platform=linux/amd64 registry.access.redhat.com/ubi10/ubi-minimal:latest@sha256:fa956af586b367c3366ac4376c3ee42a1141792b482e77d57aefb813f740f04d
 
 # Tool versions
-ARG HELM_VERSION=3.19.2
-ARG KUBELINTER_VERSION=0.7.1
-ARG KUBESCORE_VERSION=1.19.0
+ARG HELM_VERSION=3.21.3
+ARG KUBELINTER_VERSION=0.8.3
+ARG KUBESCORE_VERSION=1.20.0
 
 LABEL com.redhat.component="k8s-linter-container" \
       name="linter-image" \
